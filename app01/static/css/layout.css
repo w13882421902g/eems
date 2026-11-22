@@ -1,0 +1,27 @@
+/* 黑色导航栏样式 */
+.hrms-navbar {
+    margin-bottom: 0;
+    border-radius: 0;
+    border: none;
+}
+
+.hrms-navbar .navbar-nav > li > a {
+    color: #d5d5d5;
+    font-size: 15px;
+    padding: 18px 18px;
+}
+
+.hrms-navbar .navbar-nav > li > a:hover,
+.hrms-navbar .navbar-nav > li.active > a {
+    color: #ffffff;
+    background-color: #000000;
+}
+
+.hrms-content {
+    padding: 20px;
+}
+
+/* 操作按钮间距 */
+.btn-edit {
+    margin-right: 5px;
+}

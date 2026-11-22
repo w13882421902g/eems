@@ -1,0 +1,117 @@
+{% extends 'app01/layout.html' %}
+{% block title %}首页 · 企业员工管理系统{% endblock %}
+{% block content %}
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <span class="h4">你好，{{ request.session.user_name }}</span>
+        <span class="label label-{% if is_super_scope %}danger{% elif is_dept_scope %}warning{% else %}info{% endif %}">
+            {% if is_super_scope %}超级管理员{% elif is_dept_scope %}部门管理员{% else %}普通员工{% endif %}
+        </span>
+        <span class="text-muted" style="margin-left:10px;">{{ scope_label }}</span>
+    </div>
+    <div class="panel-body">
+        <div class="row">
+            <div class="col-md-3 col-sm-6">
+                <div class="well text-center" style="margin-bottom:10px;">
+                    <div class="h2" style="margin:0;">{{ cards.employee_count }}</div>
+                    <div class="text-muted">数据范围内员工</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="well text-center" style="margin-bottom:10px;">
+                    <div class="h2" style="margin:0;">{{ cards.attendance_count }}</div>
+                    <div class="text-muted">{{ today|date:"Y" }} 年考勤记录</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="well text-center" style="margin-bottom:10px;">
+                    <div class="h2" style="margin:0;">{{ cards.salary_total }}</div>
+                    <div class="text-muted">{{ cards.month }} 实发工资合计</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="well text-center" style="margin-bottom:10px;">
+                    <div class="h2" style="margin:0;">{{ cards.task_count }}</div>
+                    <div class="text-muted">数据范围内任务</div>
+                </div>
+            </div>
+        </div>
+        <p class="text-muted" style="margin-top:6px;">
+            我的部门：{{ cards.dept_names }}
+            {% if employee %}　我的档案：{{ employee.name }}（{{ employee.depart.title }}）{% endif %}
+            {% if is_super_scope %}　当前超级管理员人数：{{ cards.super_admin_count }}{% endif %}
+            {% if is_super_scope %}　系统订单总数：{{ cards.order_count }}{% endif %}
+        </p>
+    </div>
+</div>
+<div class="row">
+    <div class="col-md-7">
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="h4">数据权限说明</span></div>
+            <div class="panel-body">
+                <table class="table table-bordered">
+                    <thead>
+                    <tr><th>角色</th><th>可见范围</th><th>可维护范围</th></tr>
+                    </thead>
+                    <tbody>
+                    <tr {% if is_super_scope %}class="danger"{% endif %}>
+                        <td><span class="label label-danger">超级管理员</span></td>
+                        <td>全部部门、全部员工、全部考勤/薪资/任务、用户与角色</td>
+                        <td>全部功能</td>
+                    </tr>
+                    <tr {% if is_dept_scope %}class="warning"{% endif %}>
+                        <td><span class="label label-warning">部门管理员</span></td>
+                        <td>仅本部门员工及其考勤、薪资、任务</td>
+                        <td>本部门的员工/考勤/薪资/任务、公告</td>
+                    </tr>
+                    <tr {% if is_self_scope %}class="info"{% endif %}>
+                        <td><span class="label label-info">普通员工</span></td>
+                        <td>仅本人档案、本人考勤、本人薪资、本人任务、公告</td>
+                        <td>只读（wg可使用）</td>
+                    </tr>
+                    </tbody>
+                </table>
+                <p class="text-muted">
+                    权限由 <code>app01/utils/scope.py</code> 统一控制：页面菜单、列表数据、AJAX 接口、AI 数据点评
+                    四处同时生效，即使手动改 URL 也无法越权查看其他部门或他人的数据。
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="h4">最新公告</span></div>
+            <div class="panel-body">
+                <ul class="list-group">
+                    {% for notice in notice_list %}
+                    <li class="list-group-item">
+                        {% if notice.is_top %}<span class="label label-danger">置顶</span>{% endif %}
+                        {{ notice.title }}
+                        <span class="text-muted pull-right">{{ notice.publish_time|date:"Y-m-d" }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-muted">暂无公告</li>
+                    {% endfor %}
+                </ul>
+                <a href="/notice/list/" class="btn btn-default btn-sm">查看全部公告</a>
+            </div>
+        </div>
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="h4">快捷入口</span></div>
+            <div class="panel-body">
+                <a href="/ai/assistant/" class="btn btn-primary btn-sm">wg · AI 助手</a>
+                {% if is_self_scope %}
+                <a href="/attendance/list/" class="btn btn-default btn-sm">我的考勤</a>
+                <a href="/salary/list/" class="btn btn-default btn-sm">我的薪资</a>
+                <a href="/task/list/" class="btn btn-default btn-sm">我的任务</a>
+                {% else %}
+                <a href="/employee/list/" class="btn btn-default btn-sm">员工管理</a>
+                <a href="/attendance/list/" class="btn btn-default btn-sm">考勤管理</a>
+                <a href="/salary/list/" class="btn btn-default btn-sm">薪资管理</a>
+                {% if is_dept_scope %}<a href="/chart/" class="btn btn-default btn-sm">数据统计</a>{% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

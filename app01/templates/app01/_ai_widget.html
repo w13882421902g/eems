@@ -1,0 +1,528 @@
+{% comment %}
+全局 AI 浮窗（挂载在 layout.html，所有登录后的页面右下角都能用）
+- 悬浮球点击展开/收起，面板可拖动，位置记在浏览器本地
+- 回复走 /ai/chat/stream/ 的 SSE 流式接口，逐字显示
+- 与智能助手工作台共用同一份会话历史（session: ai_chat_history）
+{% endcomment %}
+{% load static %}
+<div id="aiWidget" data-scope="{{ scope_label }}">
+    <!-- 悬浮球 -->
+    <button type="button" id="aiwBubble" title="打开wg（Alt+A）" aria-label="打开wg">
+        <img class="aiw-bubble-img" src="{% static 'img/ai_avatar.png' %}" alt="wg">
+        <span class="aiw-bubble-dot"></span>
+    </button>
+    <!-- 聊天面板 -->
+    <div id="aiwPanel" role="dialog" aria-label="wg浮窗" aria-hidden="true">
+        <div class="aiw-header" id="aiwHeader">
+            <div class="aiw-brand">
+                <span class="aiw-logo"><img src="{% static 'img/ai_avatar.png' %}" alt="wg"></span>
+                <div>
+                    <div class="aiw-title">wg</div>
+                    <div class="aiw-sub">{{ scope_label }} · 可问制度、考勤、薪资、招聘</div>
+                </div>
+            </div>
+            <div class="aiw-actions">
+                <button type="button" class="aiw-icon-btn" id="aiwClear" title="清空对话">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"
+                         stroke-linecap="round"><path d="M4 7h16M9 7V5h6v2M7 7l1 12h8l1-12"></path></svg>
+                </button>
+                <button type="button" class="aiw-icon-btn" id="aiwClose" title="收起（Esc）">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                </button>
+            </div>
+        </div>
+        <div class="aiw-body" id="aiwBody">
+            <div class="aiw-welcome" id="aiwWelcome">
+                <p>你好，我是wg。可以问我公司制度、考勤薪资规则，也能帮你写招聘 JD、查员工信息。</p>
+                <p class="aiw-welcome-tip">回答只依据制度库与本系统数据，没有依据会直接说“不知道”。</p>
+                <div class="aiw-chips">
+                    <button type="button" class="aiw-chip">年假有几天？</button>
+                    <button type="button" class="aiw-chip">迟到怎么扣款？</button>
+                    <button type="button" class="aiw-chip">报销需要什么材料？</button>
+                </div>
+            </div>
+        </div>
+        <div class="aiw-footer">
+            <div class="aiw-input-wrap">
+                <textarea id="aiwInput" rows="1" maxlength="500"
+                          placeholder="输入问题，Enter 发送"></textarea>
+                <button type="button" id="aiwSend" title="发送" aria-label="发送">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l16-8-6 8 6 8-16-8z"></path></svg>
+                </button>
+            </div>
+            <div class="aiw-hint">
+                <span id="aiwMode">Enter 发送 · Shift+Enter 换行</span>
+                <a href="/ai/assistant/" class="aiw-more">打开完整工作台</a>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    /* ============ AI 浮窗样式（全部前缀 aiw-，避免影响原页面） ============ */
+    #aiwBubble {
+        position: fixed; right: 24px; bottom: 24px; z-index: 2100;
+        width: 58px; height: 58px; border: 0; border-radius: 50%;
+        padding: 0; overflow: visible;
+        display: flex; align-items: center; justify-content: center;
+        color: #fff; cursor: pointer;
+        background: #fff;
+        box-shadow: 0 10px 24px rgba(29, 78, 216, .35), 0 2px 6px rgba(15, 23, 42, .18);
+        transition: transform .18s ease, box-shadow .18s ease;
+    }
+    #aiwBubble .aiw-bubble-img {
+        width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;
+    }
+    #aiwBubble:hover { transform: translateY(-2px) scale(1.04); box-shadow: 0 14px 30px rgba(29, 78, 216, .42); }
+    #aiwBubble:active { transform: scale(.97); }
+    #aiwBubble .aiw-bubble-dot {
+        position: absolute; top: 6px; right: 6px; width: 10px; height: 10px; border-radius: 50%;
+        background: #22c55e; border: 2px solid #fff;
+    }
+    #aiwBubble.aiw-pulse::after {
+        content: ""; position: absolute; inset: 0; border-radius: 50%;
+        border: 2px solid rgba(14, 165, 233, .55);
+        animation: aiwPulse 2.2s ease-out infinite;
+    }
+    @keyframes aiwPulse {
+        0% { transform: scale(1); opacity: .8; }
+        70% { transform: scale(1.45); opacity: 0; }
+        100% { opacity: 0; }
+    }
+    #aiwPanel {
+        position: fixed; right: 24px; bottom: 96px; z-index: 2050;
+        width: 396px; max-width: calc(100vw - 32px);
+        height: min(612px, calc(100vh - 132px));
+        display: none; flex-direction: column;
+        border-radius: 16px; overflow: hidden;
+        background: #fff;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, .28), 0 4px 12px rgba(15, 23, 42, .12);
+        border: 1px solid #e2e8f0;
+        transform-origin: bottom right;
+    }
+    #aiwPanel.aiw-open { display: flex; animation: aiwIn .18s ease-out both; }
+    @keyframes aiwIn {
+        from { opacity: 0; transform: translateY(8px) scale(.97); }
+        to { opacity: 1; transform: none; }
+    }
+    .aiw-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 14px; color: #fff; cursor: move; user-select: none;
+        background: linear-gradient(135deg, #0ea5e9 0%, #1d4ed8 100%);
+    }
+    .aiw-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .aiw-logo {
+        width: 34px; height: 34px; border-radius: 50%; flex: none;
+        display: flex; align-items: center; justify-content: center;
+        background: #fff; border: 1px solid rgba(255, 255, 255, .55);
+        overflow: hidden;
+    }
+    .aiw-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .aiw-title { font-size: 15px; font-weight: 600; line-height: 1.2; }
+    .aiw-sub { font-size: 11px; opacity: .88; margin-top: 2px; max-width: 240px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .aiw-actions { display: flex; gap: 2px; flex: none; }
+    .aiw-icon-btn {
+        width: 28px; height: 28px; border: 0; border-radius: 8px; color: #fff;
+        background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .aiw-icon-btn:hover { background: rgba(255, 255, 255, .18); }
+    .aiw-body {
+        flex: 1; overflow-y: auto; padding: 14px 14px 6px; background: #f6f9fc;
+        scroll-behavior: smooth;
+    }
+    .aiw-msg { display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-start; }
+    .aiw-msg.aiw-user { flex-direction: row-reverse; }
+    .aiw-avatar {
+        width: 28px; height: 28px; border-radius: 50%; flex: none;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700; color: #fff;
+        background: linear-gradient(135deg, #0ea5e9, #1d4ed8);
+    }
+    .aiw-avatar-photo { padding: 0; overflow: hidden; background: #fff; border: 1px solid #e8edf3; }
+    .aiw-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
+    .aiw-bubble {
+        max-width: 82%; padding: 9px 12px; border-radius: 12px;
+        font-size: 13.5px; line-height: 1.65; color: #1f2937;
+        background: #fff; white-space: pre-wrap; word-break: break-word;
+        border: 1px solid #e8edf3; box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+    }
+    .aiw-msg.aiw-user .aiw-bubble {
+        background: #1d4ed8; color: #fff; border-color: #1d4ed8;
+        border-top-right-radius: 4px;
+    }
+    .aiw-msg.aiw-ai .aiw-bubble { border-top-left-radius: 4px; }
+    .aiw-meta { margin-top: 6px; font-size: 11px; color: #64748b; display: flex; flex-wrap: wrap; gap: 4px; }
+    .aiw-source {
+        display: inline-block; padding: 1px 7px; border-radius: 999px;
+        background: #eef2ff; color: #1d4ed8; border: 1px solid #dbeafe;
+    }
+    .aiw-typing { color: #94a3b8; }
+    .aiw-welcome {
+        background: #fff; border: 1px solid #e8edf3; border-radius: 12px;
+        padding: 12px 14px; font-size: 13px; color: #374151; line-height: 1.7;
+    }
+    .aiw-welcome p { margin: 0 0 6px; }
+    .aiw-welcome-tip { color: #6b7280; font-size: 12px; }
+    .aiw-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .aiw-chip {
+        border: 1px solid #cfe1f3; background: #f2f8fe;
+        color: #1e4e8c; border-radius: 999px; padding: 5px 11px;
+        font-size: 12px; cursor: pointer; transition: all .15s ease;
+    }
+    .aiw-chip:hover { background: #e0f0ff; border-color: #9cc9ee; }
+    .aiw-footer { padding: 10px 12px 10px; border-top: 1px solid #e8edf3; background: #fff; }
+    .aiw-input-wrap {
+        display: flex; align-items: flex-end; gap: 8px; padding: 6px 8px 6px 12px;
+        border: 1px solid #d7e0ea; border-radius: 14px; background: #f9fbfd;
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    .aiw-input-wrap:focus-within { border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56, 189, 248, .16); background: #fff; }
+    #aiwInput {
+        flex: 1; border: 0; outline: none; resize: none; background: transparent;
+        font-size: 13.5px; line-height: 1.6; max-height: 120px; min-height: 24px;
+        color: #111827; padding: 3px 0;
+    }
+    #aiwSend {
+        width: 34px; height: 34px; border: 0; border-radius: 11px; flex: none;
+        color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(135deg, #0ea5e9, #1d4ed8);
+        transition: opacity .15s ease, transform .15s ease;
+    }
+    #aiwSend:hover { transform: translateY(-1px); }
+    #aiwSend:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .aiw-hint {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-top: 6px; font-size: 11px; color: #94a3b8;
+    }
+    .aiw-more { color: #1d4ed8; text-decoration: none; }
+    .aiw-more:hover { text-decoration: underline; }
+    @media (max-width: 640px) {
+        #aiwBubble { right: 16px; bottom: 16px; width: 52px; height: 52px; }
+        #aiwPanel {
+            right: 12px; left: 12px; bottom: 12px; top: 12px;
+            width: auto; height: auto; max-width: none; max-height: none;
+            border-radius: 14px;
+        }
+        #aiwPanel .aiw-header { cursor: default; }
+        .aiw-sub { max-width: 150px; }
+    }
+</style>
+<script>
+    (function () {
+        "use strict";
+        var root = document.getElementById("aiWidget");
+        if (!root) { return; }
+        var panel = document.getElementById("aiwPanel");
+        var bubble = document.getElementById("aiwBubble");
+        var header = document.getElementById("aiwHeader");
+        var body = document.getElementById("aiwBody");
+        var welcome = document.getElementById("aiwWelcome");
+        var input = document.getElementById("aiwInput");
+        var sendBtn = document.getElementById("aiwSend");
+        var clearBtn = document.getElementById("aiwClear");
+        var closeBtn = document.getElementById("aiwClose");
+        var modeLabel = document.getElementById("aiwMode");
+        var AI_AVATAR_URL = "{% static 'img/ai_avatar.png' %}";
+        var streaming = false;
+        var historyLoaded = false;
+        var sourceNames = [];
+        var POS_KEY = "aiw_panel_pos";
+
+        function getCookie(name) {
+            var parts = document.cookie ? document.cookie.split(";") : [];
+            for (var i = 0; i < parts.length; i++) {
+                var item = parts[i].replace(/^\s+/, "");
+                if (item.indexOf(name + "=") === 0) {
+                    return decodeURIComponent(item.substring(name.length + 1));
+                }
+            }
+            return "";
+        }
+        var csrfToken = getCookie("csrftoken");
+        function ensureCsrf(callback) {
+            if (csrfToken) { callback(); return; }
+            fetch("/ai/csrf/", { credentials: "same-origin" })
+                .then(function () {
+                    csrfToken = getCookie("csrftoken");
+                    callback();
+                })
+                .catch(callback);
+        }
+        function scrollToEnd() {
+            body.scrollTop = body.scrollHeight;
+        }
+        function hideWelcome() {
+            if (welcome && welcome.parentNode) { welcome.parentNode.removeChild(welcome); }
+        }
+        function addMessage(role, text) {
+            hideWelcome();
+            var row = document.createElement("div");
+            row.className = "aiw-msg " + (role === "user" ? "aiw-user" : "aiw-ai");
+            if (role !== "user") {
+                var avatar = document.createElement("span");
+                avatar.className = "aiw-avatar aiw-avatar-photo";
+                var avatarImg = document.createElement("img");
+                avatarImg.src = AI_AVATAR_URL;
+                avatarImg.alt = "wg";
+                avatar.appendChild(avatarImg);
+                row.appendChild(avatar);
+            }
+            var bubbleEl = document.createElement("div");
+            bubbleEl.className = "aiw-bubble";
+            if (text) { bubbleEl.textContent = text; }
+            row.appendChild(bubbleEl);
+            body.appendChild(row);
+            scrollToEnd();
+            return bubbleEl;
+        }
+        function addMeta(bubbleEl, sources) {
+            var meta = document.createElement("div");
+            meta.className = "aiw-meta";
+            (sources || []).forEach(function (title) {
+                var chip = document.createElement("span");
+                chip.className = "aiw-source";
+                chip.textContent = title;
+                meta.appendChild(chip);
+            });
+            if (meta.childNodes.length) { bubbleEl.appendChild(meta); }
+        }
+        function openPanel() {
+            panel.classList.add("aiw-open");
+            panel.setAttribute("aria-hidden", "false");
+            bubble.classList.remove("aiw-pulse");
+            if (!historyLoaded) { loadHistory(); }
+            setTimeout(function () { input.focus(); }, 120);
+        }
+        function closePanel() {
+            panel.classList.remove("aiw-open");
+            panel.setAttribute("aria-hidden", "true");
+            bubble.classList.add("aiw-pulse");
+            sessionStorage.setItem("aiw_open", "0");
+        }
+        function togglePanel() {
+            if (panel.classList.contains("aiw-open")) { closePanel(); }
+            else { openPanel(); }
+        }
+        // ---- 历史对话：与工作台共用同一份 session 历史 ----
+        function loadHistory() {
+            historyLoaded = true;
+            fetch("/ai/chat/history/", { credentials: "same-origin" })
+                .then(function (resp) { return resp.json(); })
+                .then(function (data) {
+                    if (!data || !data.status || !data.history || !data.history.length) { return; }
+                    data.history.forEach(function (item) {
+                        if (item && item.content) {
+                            addMessage(item.role === "user" ? "user" : "assistant", item.content);
+                        }
+                    });
+                    var tip = document.createElement("div");
+                    tip.className = "aiw-meta";
+                    tip.style.textAlign = "center";
+                    tip.style.display = "block";
+                    tip.textContent = "以上为上次的对话记录";
+                    body.appendChild(tip);
+                    scrollToEnd();
+                })
+                .catch(function () { /* 历史读取失败不影响提问 */ });
+        }
+        // ---- 发送 + SSE 流式 ----
+        function send() {
+            var text = (input.value || "").replace(/\s+$/, "");
+            if (!text || streaming) { return; }
+            if (text.length > 500) {
+                addMessage("assistant", "【提示】问题太长了（上限 500 字），请精简后再问。");
+                return;
+            }
+            addMessage("user", text);
+            input.value = "";
+            autoGrow();
+            setBusy(true);
+            var answerBubble = addMessage("assistant", "");
+            var full = "";
+            sourceNames = [];
+            var typing = document.createElement("span");
+            typing.className = "aiw-typing";
+            typing.textContent = "正在思考…";
+            answerBubble.appendChild(typing);
+            ensureCsrf(function () {
+                fetch("/ai/chat/stream/", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": csrfToken
+                    },
+                    body: JSON.stringify({ message: text })
+                }).then(function (resp) {
+                    var type = resp.headers.get("Content-Type") || "";
+                    if (type.indexOf("text/event-stream") === -1) {
+                        return resp.text().then(function () {
+                            // 登录过期会被重定向到登录页（返回 HTML）
+                            throw new Error("对话请求被中断，请刷新页面重新登录后再试。");
+                        });
+                    }
+                    var reader = resp.body.getReader();
+                    var decoder = new TextDecoder("utf-8");
+                    var buffer = "";
+                    function read() {
+                        return reader.read().then(function (result) {
+                            if (result.done) { return; }
+                            buffer += decoder.decode(result.value, { stream: true });
+                            var lines = buffer.split("\n");
+                            buffer = lines.pop();
+                            for (var i = 0; i < lines.length; i++) {
+                                var line = lines[i].trim();
+                                if (!line || line.indexOf("data:") !== 0) { continue; }
+                                var payload;
+                                try { payload = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+                                if (payload.meta) {
+                                    sourceNames = (payload.meta.sources || []).map(function (s) { return s.title; });
+                                } else if (payload.delta !== undefined) {
+                                    if (typing.parentNode) { typing.parentNode.removeChild(typing); }
+                                    full += payload.delta;
+                                    answerBubble.textContent = full;
+                                    scrollToEnd();
+                                } else if (payload.done) {
+                                    if (!full && payload.answer) { full = payload.answer; }
+                                    if (typing.parentNode) { typing.parentNode.removeChild(typing); }
+                                    answerBubble.textContent = full;
+                                    addMeta(answerBubble, sourceNames);
+                                    commitAnswer(full);
+                                }
+                            }
+                            return read();
+                        });
+                    }
+                    return read();
+                }).catch(function (err) {
+                    if (typing.parentNode) { typing.parentNode.removeChild(typing); }
+                    answerBubble.textContent = "【提示】" + (err && err.message ? err.message : "对话失败，请稍后再试。");
+                }).finally(function () {
+                    setBusy(false);
+                });
+            });
+        }
+        function commitAnswer(answer) {
+            if (!answer) { return; }
+            fetch("/ai/chat/commit/", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+                body: JSON.stringify({ answer: answer })
+            }).catch(function () { /* 历史回写失败不影响当前回答 */ });
+        }
+        function setBusy(busy) {
+            streaming = busy;
+            sendBtn.disabled = busy;
+            input.disabled = busy;
+            if (busy) { modeLabel.textContent = "正在回答…"; }
+            else {
+                modeLabel.textContent = "Enter 发送 · Shift+Enter 换行";
+                input.focus();
+            }
+        }
+        function autoGrow() {
+            input.style.height = "auto";
+            input.style.height = Math.min(input.scrollHeight, 120) + "px";
+        }
+        // ---- 拖动面板 ----
+        var dragState = null;
+        header.addEventListener("pointerdown", function (event) {
+            if (event.target.closest("button")) { return; }
+            var rect = panel.getBoundingClientRect();
+            dragState = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+            header.setPointerCapture(event.pointerId);
+            header.style.cursor = "grabbing";
+        });
+        header.addEventListener("pointermove", function (event) {
+            if (!dragState) { return; }
+            var left = event.clientX - dragState.dx;
+            var top = event.clientY - dragState.dy;
+            var maxLeft = window.innerWidth - panel.offsetWidth - 8;
+            var maxTop = window.innerHeight - panel.offsetHeight - 8;
+            left = Math.min(Math.max(8, left), Math.max(8, maxLeft));
+            top = Math.min(Math.max(8, top), Math.max(8, maxTop));
+            panel.style.left = left + "px";
+            panel.style.top = top + "px";
+            panel.style.right = "auto";
+            panel.style.bottom = "auto";
+        });
+        header.addEventListener("pointerup", function () {
+            if (!dragState) { return; }
+            dragState = null;
+            header.style.cursor = "move";
+            localStorage.setItem(POS_KEY, JSON.stringify({
+                left: parseInt(panel.style.left, 10),
+                top: parseInt(panel.style.top, 10)
+            }));
+        });
+        function restorePos() {
+            try {
+                var saved = JSON.parse(localStorage.getItem(POS_KEY) || "null");
+                if (!saved || isNaN(saved.left) || isNaN(saved.top)) { return; }
+                if (window.innerWidth <= 640) { return; }
+                var maxLeft = window.innerWidth - 396 - 8;
+                var maxTop = window.innerHeight - 200;
+                panel.style.left = Math.min(Math.max(8, saved.left), Math.max(8, maxLeft)) + "px";
+                panel.style.top = Math.min(Math.max(8, saved.top), Math.max(8, maxTop)) + "px";
+                panel.style.right = "auto";
+                panel.style.bottom = "auto";
+            } catch (e) { /* 位置数据坏了就用默认位置 */ }
+        }
+        // ---- 事件绑定 ----
+        bubble.addEventListener("click", togglePanel);
+        closeBtn.addEventListener("click", closePanel);
+        sendBtn.addEventListener("click", send);
+        input.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                send();
+            }
+        });
+        input.addEventListener("input", autoGrow);
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && panel.classList.contains("aiw-open")) { closePanel(); }
+            if (event.altKey && (event.key === "a" || event.key === "A")) { event.preventDefault(); togglePanel(); }
+        });
+        window.addEventListener("resize", function () {
+            if (window.innerWidth <= 640) {
+                panel.style.left = "";
+                panel.style.top = "";
+                panel.style.right = "";
+                panel.style.bottom = "";
+            } else {
+                restorePos();
+            }
+        });
+        document.querySelectorAll(".aiw-chip").forEach(function (chip) {
+            chip.addEventListener("click", function () {
+                input.value = chip.textContent;
+                send();
+            });
+        });
+        clearBtn.addEventListener("click", function () {
+            ensureCsrf(function () {
+                fetch("/ai/chat/clear/", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+                    body: "{}"
+                }).then(function () {
+                    body.innerHTML = "";
+                    historyLoaded = true;
+                    var tip = document.createElement("div");
+                    tip.className = "aiw-meta";
+                    tip.style.display = "block";
+                    tip.style.textAlign = "center";
+                    tip.textContent = "对话已清空，可以重新开始。";
+                    body.appendChild(tip);
+                });
+            });
+        });
+        restorePos();
+        bubble.classList.add("aiw-pulse");
+        if (sessionStorage.getItem("aiw_open") === "1") { openPanel(); }
+    })();
+</script>

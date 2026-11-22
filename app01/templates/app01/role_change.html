@@ -1,0 +1,37 @@
+{% extends 'app01/layout.html' %}
+
+{% block content %}
+<!--
+    角色新建/编辑共用页：
+    1. 角色名称与权限为多选，权限来自 Permission 表；
+    2. 多对多字段在表单提交后由 save_m2m 写入中间表；
+    3. 编辑时已选权限会自动回显。
+-->
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <span class="h4">
+            {% if form.instance.pk %}编辑角色{% else %}新建角色{% endif %}
+        </span>
+    </div>
+    <div class="panel-body">
+        <form method="post" class="form-horizontal" style="max-width:600px;" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            <div class="form-group">
+                <label class="col-sm-2 control-label">{{ field.label }}</label>
+                <div class="col-sm-10">
+                    {{ field }}
+                    <span class="text-danger">{{ field.errors.0 }}</span>
+                </div>
+            </div>
+            {% endfor %}
+            <div class="form-group">
+                <div class="col-sm-offset-2 col-sm-10">
+                    <button type="submit" class="btn btn-primary">提交</button>
+                    <a href="/role/list/" class="btn btn-default">返回</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

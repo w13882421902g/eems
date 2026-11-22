@@ -1,0 +1,16 @@
+{% extends 'app01/layout.html' %}
+{% block title %}无权限访问{% endblock %}
+{% block content %}
+<div class="panel panel-danger" style="margin-top:40px;">
+    <div class="panel-heading"><span class="h4">访问被拒绝</span></div>
+    <div class="panel-body text-center">
+        <p class="h4 text-danger">{{ message }}</p>
+        <p class="text-muted">当前账号：{{ request.session.user_name }}（{{ scope_label }}）</p>
+        <p class="text-muted">
+            系统按角色分配数据范围：超级管理员可看全部，部门管理员只看本部门，普通员工只看本人。
+        </p>
+        <a href="/home/" class="btn btn-primary">返回首页</a>
+        <a href="/ai/assistant/" class="btn btn-default">去找wg</a>
+    </div>
+</div>
+{% endblock %}

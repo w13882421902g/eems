@@ -1,0 +1,102 @@
+{% extends 'app01/layout.html' %}
+
+{% block content %}
+<!--
+    部门列表页：登录后的默认首页（/depart/list/）。
+    后端通过 select_related("leader") 一次性带出负责人信息，模板直接使用。
+-->
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <span class="h4">部门列表</span>
+        <!-- 标题右侧显示总条数，让分页的“总量”一目了然 -->
+        <span class="text-muted" style="margin-left: 8px;">共 {{ total_count }} 个部门</span>
+        <!-- pull-right：新建按钮靠右对齐，保持标题与操作分离（仅超级管理员可见） -->
+        {% if is_super_scope %}
+        <a href="/depart/add/" class="btn btn-success pull-right">新建部门</a>
+        {% else %}
+        <span class="text-muted pull-right">部门管理员：仅可维护自己负责的部门</span>
+        {% endif %}
+    </div>
+    <div class="panel-body">
+        <!--
+            批量上传面板（讲义第 17 章）：
+            method="post" + enctype="multipart/form-data" + 控件 name 三者缺一不可；
+            少了 enctype，文件不会进入 request.FILES，后端取到的就是 None。
+        -->
+        {% if is_super_scope %}
+        <div class="panel panel-info">
+            <div class="panel-heading">
+                <span class="glyphicon glyphicon-import" aria-hidden="true"></span>
+                批量导入部门（Excel）
+            </div>
+            <div class="panel-body">
+                <form method="post" enctype="multipart/form-data" action="/depart/multi/"
+                      class="form-inline">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label class="sr-only" for="excelFile">选择文件</label>
+                        <input id="excelFile" type="file" name="exc"
+                               accept=".xlsx,.xlsm" class="form-control">
+                    </div>
+                    <button type="submit" class="btn btn-info btn-sm">上传导入</button>
+                    <span class="text-muted small">
+                        仅支持 .xlsx / .xlsm，5MB 以内；第一列为部门名称，从第 2 行开始读取，重名自动跳过。
+                    </span>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <table class="table table-bordered table-hover">
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>名称</th>
+                <th>负责人</th>
+                <th>操作</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for depart in page_queryset %}
+            <tr>
+                <td>{{ depart.id }}</td>
+                <td>{{ depart.title }}</td>
+                <td>
+                    <!-- 负责人允许为空（新部门可能还没指定），空值显示 "-" -->
+                    {% if depart.leader %}
+                        {{ depart.leader.username }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if can_manage %}
+                    <a href="/depart/edit/{{ depart.id }}/"
+                       class="btn btn-primary btn-sm btn-edit">编辑</a>
+                    {% endif %}
+                    {% if is_super_scope %}
+                    <!-- 删除前弹确认框，且只允许 POST + CSRF（部门结构变更仅超管可做） -->
+                    <form method="post" action="/depart/delete/{{ depart.id }}/" style="display:inline;"
+                          onsubmit="return confirm('确定删除该部门吗？');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger btn-sm">删除</button>
+                    </form>
+                    {% endif %}
+                    {% if not can_manage %}<span class="text-muted">只读</span>{% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="text-center text-muted">暂无数据</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- 分页条由后端 Pagination 组件生成（共几条 / 首页 / 页码 / 下一页 / 尾页） -->
+        <div class="text-center">
+            {{ page_string }}
+        </div>
+    </div>
+</div>
+{% endblock %}

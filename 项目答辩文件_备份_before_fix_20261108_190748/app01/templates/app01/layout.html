@@ -1,0 +1,69 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>企业员工管理系统</title>
+    <link rel="stylesheet" href="{% static 'plugins/bootstrap-3.4.1/css/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/layout.css' %}">
+    {% block css %}{% endblock %}
+</head>
+<body>
+<!-- 黑色顶部导航栏 -->
+<nav class="navbar navbar-inverse navbar-static-top hrms-navbar">
+    <div class="container-fluid">
+        <ul class="nav navbar-nav">
+            <li {% if '/depart/' in request.path %}class="active"{% endif %}>
+                <a href="/depart/list/">首页</a>
+            </li>
+            <li {% if '/depart/' in request.path %}class="active"{% endif %}>
+                <a href="/depart/list/">部门管理</a>
+            </li>
+            <li {% if '/employee/' in request.path %}class="active"{% endif %}>
+                <a href="/employee/list/">员工管理</a>
+            </li>
+            <li {% if '/attendance/' in request.path %}class="active"{% endif %}>
+                <a href="/attendance/list/">考勤管理</a>
+            </li>
+            <li {% if '/salary/' in request.path %}class="active"{% endif %}>
+                <a href="/salary/list/">薪资管理</a>
+            </li>
+            <li {% if '/notice/' in request.path %}class="active"{% endif %}>
+                <a href="/notice/list/">公告管理</a>
+            </li>
+            <li {% if '/task/' in request.path %}class="active"{% endif %}>
+                <a href="/task/list/">任务管理</a>
+            </li>
+            <li {% if '/chart/' in request.path %}class="active"{% endif %}>
+                <a href="/chart/">数据统计</a>
+            </li>
+            <li {% if '/user_manage/' in request.path %}class="active"{% endif %}>
+                <a href="/user_manage/list/">用户管理</a>
+            </li>
+            <li {% if '/role/' in request.path %}class="active"{% endif %}>
+                <a href="/role/list/">角色管理</a>
+            </li>
+        </ul>
+        <!-- 右侧用户下拉 -->
+        <ul class="nav navbar-nav navbar-right">
+            <li class="dropdown">
+                <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+                    {{ request.session.user_name }} <span class="caret"></span>
+                </a>
+                <ul class="dropdown-menu">
+                    <li><a href="/logout/">注销登录</a></li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+<div class="container-fluid hrms-content">
+    {% block content %}{% endblock %}
+</div>
+
+<script src="{% static 'js/jquery-3.6.0.min.js' %}"></script>
+<script src="{% static 'plugins/bootstrap-3.4.1/js/bootstrap.min.js' %}"></script>
+{% block js %}{% endblock %}
+</body>
+</html>

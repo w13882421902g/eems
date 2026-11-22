@@ -1,0 +1,155 @@
+{% extends 'app01/layout.html' %}
+
+{% block content %}
+<!--
+    数据统计页（前端 + ECharts 可视化）
+    三个图表容器分别由 JS 初始化：
+    - departSalaryChart：各部门实发工资总额（柱状图）
+    - departChart：部门人数饼图
+    - salaryChart：各月实发工资折线图
+    后端只返回 JSON，图表类型完全由前端决定（讲义第 19 章的设计思路）。
+-->
+<div class="panel panel-default">
+    <div class="panel-heading"><span class="h4">数据统计</span></div>
+    <div class="panel-body">
+        <!-- 柱状图：全宽展示，部门名称较多时也不至于挤在一起 -->
+        <div class="panel panel-default">
+            <div class="panel-heading">部门薪资总额（柱状图）</div>
+            <div class="panel-body">
+                <div id="departSalaryChart" style="width:100%;height:360px;"></div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- 部门人数饼图：宽度 100%，高度 400px -->
+            <div class="col-md-6">
+                <div class="panel panel-default">
+                    <div class="panel-heading">部门人数分布（饼图）</div>
+                    <div class="panel-body">
+                        <div id="departChart" style="width:100%;height:400px;"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- 薪资趋势折线图 -->
+            <div class="col-md-6">
+                <div class="panel panel-default">
+                    <div class="panel-heading">各月实发工资（折线图）</div>
+                    <div class="panel-body">
+                        <div id="salaryChart" style="width:100%;height:400px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<!-- ECharts 图表库（本地引入，答辩现场无网络也能显示） -->
+<script src="/static/js/echarts.min.js"></script>
+<script>
+    /*
+     * 图表加载流程：
+     * 1. echarts.init(容器) 创建图表实例；
+     * 2. 用 AJAX 请求后端 JSON 接口；
+     * 3. 拿到数据后 setOption 配置标题、提示框、坐标轴和 series；
+     * 4. 监听窗口 resize，让图表跟随窗口自适应。
+     *
+     * 三个接口分别对应 chart.py 里的：
+     * - /chart/depart/salary/  -> {"data":{"legend","x_axis","series_list"}}
+     * - /chart/depart/people/  -> {"data":[{"name":"技术部","value":5}, ...]}
+     * - /chart/salary/trend/   -> {"months":["2026-09",...], "totals":[12345.0,...]}
+     */
+    $(function () {
+        var charts = [];
+        charts.push(initDepartSalary());
+        charts.push(initDepartPie());
+        charts.push(initSalaryLine());
+
+        // 窗口缩放时重算图表尺寸，避免图表被拉伸变形
+        $(window).resize(function () {
+            $.each(charts, function (index, chart) {
+                chart.resize();
+            });
+        });
+    });
+
+    // ===== 各部门薪资总额柱状图 =====
+    function initDepartSalary() {
+        var chart = echarts.init(document.getElementById("departSalaryChart"));
+        $.ajax({
+            url: "/chart/depart/salary/",
+            type: "get",
+            dataType: "json",
+            success: function (res) {
+                if (!res.status) { return; }
+                chart.setOption({
+                    title: {text: "各部门实发工资总额", left: "center"},
+                    tooltip: {trigger: "axis", axisPointer: {type: "shadow"}},
+                    legend: {data: res.data.legend, bottom: 0},
+                    grid: {bottom: 40, containLabel: true},
+                    xAxis: {type: "category", data: res.data.x_axis},
+                    yAxis: {type: "value", name: "元"},
+                    series: res.data.series_list
+                });
+            }
+        });
+        return chart;
+    }
+
+    // ===== 部门人数分布饼图 =====
+    function initDepartPie() {
+        var chart = echarts.init(document.getElementById("departChart"));
+        $.ajax({
+            url: "/chart/depart/people/",
+            type: "get",
+            dataType: "json",
+            success: function (res) {
+                if (!res.status) { return; }
+                chart.setOption({
+                    title: {text: "各部门人数分布", left: "center"},
+                    tooltip: {trigger: "item"},     // 鼠标悬停显示人数和占比
+                    legend: {bottom: 0},
+                    series: [{
+                        type: "pie",
+                        radius: "60%",
+                        data: res.data,
+                        emphasis: {
+                            itemStyle: {shadowBlur: 10, shadowColor: "rgba(0,0,0,0.4)"}
+                        }
+                    }]
+                });
+            }
+        });
+        return chart;
+    }
+
+    // ===== 各月薪资趋势折线图 =====
+    function initSalaryLine() {
+        var chart = echarts.init(document.getElementById("salaryChart"));
+        $.ajax({
+            url: "/chart/salary/trend/",
+            type: "get",
+            dataType: "json",
+            success: function (res) {
+                if (!res.status) { return; }
+                chart.setOption({
+                    title: {text: "各月实发工资趋势", left: "center"},
+                    tooltip: {trigger: "axis"},     // 按坐标轴触发提示，方便看某个月总额
+                    grid: {bottom: 40, containLabel: true},
+                    xAxis: {type: "category", data: res.months},
+                    yAxis: {type: "value", name: "元"},
+                    series: [{
+                        name: "实发工资总额",
+                        type: "line",
+                        data: res.totals,
+                        smooth: true,               // 平滑曲线
+                        areaStyle: {}               // 折线下方填充面积
+                    }]
+                });
+            }
+        });
+        return chart;
+    }
+</script>
+{% endblock %}

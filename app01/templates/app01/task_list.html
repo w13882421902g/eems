@@ -1,0 +1,150 @@
+{% extends 'app01/layout.html' %}
+
+{% block content %}
+<div class="row">
+    <!-- 左侧：任务表单（AJAX 提交，不刷新整页；普通员工只读，不显示新建表单） -->
+    <div class="col-md-4">
+        <div class="panel panel-default">
+            <div class="panel-heading"><span class="h4">新建任务</span></div>
+            <div class="panel-body">
+                {% if not can_manage %}
+                <p class="text-muted">
+                    普通员工视角：这里只展示分配给你的任务，不能新建或删除任务。
+                    如需调整任务安排，请联系部门管理员。
+                </p>
+                {% else %}
+                <!--
+                    novalidate：关闭浏览器原生校验，统一由后端 ModelForm 校验，
+                    这样错误提示格式一致，也能覆盖浏览器不支持的规则。
+                -->
+                <form id="taskForm" novalidate>
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label>级别</label>
+                        <select class="form-control" name="level">
+                            <option value="1">紧急</option>
+                            <option value="2" selected>普通</option>
+                            <option value="3">不急</option>
+                        </select>
+                        <!-- 每个字段下方预留错误提示位，data-field 与后端返回的字段名对应 -->
+                        <span class="text-danger error-msg" data-field="level"></span>
+                    </div>
+                    <div class="form-group">
+                        <label>标题</label>
+                        <input type="text" class="form-control" name="title">
+                        <span class="text-danger error-msg" data-field="title"></span>
+                    </div>
+                    <div class="form-group">
+                        <label>详情</label>
+                        <textarea class="form-control" name="detail" rows="4"></textarea>
+                        <span class="text-danger error-msg" data-field="detail"></span>
+                    </div>
+                    <div class="form-group">
+                        <label>负责人</label>
+                        <select class="form-control" name="leader">
+                            {% for user in leader_list %}
+                            <option value="{{ user.id }}">{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <span class="text-danger error-msg" data-field="leader"></span>
+                    </div>
+                    <button type="button" id="btnSubmit" class="btn btn-primary">提交</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧：任务列表（分页） -->
+    <div class="col-md-8">
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <span class="h4">任务列表</span>
+                <span class="text-muted" style="margin-left: 8px;">共 {{ total_count }} 条</span>
+            </div>
+            <div class="panel-body">
+                <table class="table table-bordered table-hover">
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>级别</th>
+                        <th>标题</th>
+                        <th>详情</th>
+                        <th>负责人</th>
+                        <th>操作</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <!-- page_queryset 只包含当前页的数据，不会把全表查出来 -->
+                    {% for task in page_queryset %}
+                    <tr>
+                        <td>{{ task.id }}</td>
+                        <!-- get_level_display：1/2/3 转成 紧急/普通/不急 -->
+                        <td>{{ task.get_level_display }}</td>
+                        <td>{{ task.title }}</td>
+                        <td>{{ task.detail }}</td>
+                        <td>{{ task.leader.username }}</td>
+                        <td>
+                            {% if can_manage %}
+                            <form method="post" action="/task/delete/{{ task.id }}/" style="display:inline;"
+                                  onsubmit="return confirm('确定删除吗？');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-danger btn-sm">删除</button>
+                            </form>
+                            {% else %}
+                            <span class="text-muted">只读</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted">暂无数据</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+
+                <!-- 页码：由后端 Pagination 组件生成 -->
+                <div class="text-center">
+                    {{ page_string }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+    /*
+     * 任务 AJAX 提交流程（答辩可演示的点）：
+     * 1. 点击"提交"先清空旧错误提示；
+     * 2. serialize() 把表单字段拼成 username=xx&password=yy 的格式；
+     * 3. 请求头带上 X-CSRFToken：Django 的 CSRF 校验要求 POST 请求提供令牌，
+     *    AJAX 不会自动带 Cookie 里的令牌，必须手动放进请求头；
+     * 4. 后端返回 {status:true,msg} 或 {status:false,errors:{字段:错误}}：
+     *    成功则提示并刷新页面；失败则把错误写到对应字段的 error-msg 位置。
+     */
+    $(function () {
+        $("#btnSubmit").click(function () {
+            $(".error-msg").text("");
+
+            $.ajax({
+                url: "/task/add/ajax/",
+                type: "post",
+                data: $("#taskForm").serialize(),
+                headers: {"X-CSRFToken": $("input[name=csrfmiddlewaretoken]").val()},
+                dataType: "json",
+                success: function (res) {
+                    if (res.status) {
+                        alert(res.msg);
+                        location.reload();
+                    } else {
+                        $.each(res.errors, function (field, msg) {
+                            $(".error-msg[data-field='" + field + "']").text(msg);
+                        });
+                    }
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

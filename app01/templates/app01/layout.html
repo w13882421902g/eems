@@ -1,0 +1,93 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}企业员工管理系统{% endblock %}</title>
+    <!-- Bootstrap 3.4.1：提供栅格、表格、按钮、导航栏等基础样式 -->
+    <link rel="stylesheet" href="{% static 'plugins/bootstrap-3.4.1/css/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/layout.css' %}">
+    <!-- 子模板可覆盖 css 块，追加自己的样式 -->
+    {% block css %}{% endblock %}
+</head>
+<body>
+<!--
+    顶部导航栏：所有页面共用的骨架。
+    - navbar-inverse：黑色主题；navbar-static-top：固定顶部但不遮挡内容。
+    - 菜单由 context_processor（app01/context_processors.py）按角色生成：
+      超级管理员=全部菜单，部门管理员=本部门相关，普通员工=只看“我的”。
+-->
+<nav class="navbar navbar-inverse navbar-static-top hrms-navbar">
+    <div class="container-fluid">
+        <ul class="nav navbar-nav">
+            {% for title, url, prefix in nav_items %}
+            <li {% if prefix in request.path %}class="active"{% endif %}>
+                <a href="{{ url }}">{{ title }}</a>
+            </li>
+            {% empty %}
+            <li><a href="/login/">请先登录</a></li>
+            {% endfor %}
+        </ul>
+        <!-- 右侧用户区：角色标签 + 账号下拉 -->
+        <ul class="nav navbar-nav navbar-right">
+            {% if current_user %}
+            <li>
+                <a href="/home/" title="{{ scope_label }}">
+                    <span class="label label-{% if is_super_scope %}danger{% elif is_dept_scope %}warning{% else %}info{% endif %}">
+                        {% if is_super_scope %}超级管理员{% elif is_dept_scope %}部门管理员{% else %}普通员工{% endif %}
+                    </span>
+                    {{ request.session.user_name }}
+                </a>
+            </li>
+            {% endif %}
+            <li class="dropdown">
+                <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+                    账号 <span class="caret"></span>
+                </a>
+                <ul class="dropdown-menu">
+                    <li><a href="/home/">我的首页</a></li>
+                    <li><a href="/ai/assistant/">智能助手</a></li>
+                    <li class="divider"></li>
+                    <li><a href="/logout/">注销登录</a></li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+<!--
+    全局提示区：视图里用 messages.success/error/warning 写入，
+    在这里统一渲染成 Bootstrap 的 alert，避免每个页面重复写提示逻辑。
+-->
+{% if messages %}
+<div class="container-fluid" style="padding-top: 15px;">
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'success' %}alert-success{% else %}alert-warning{% endif %} alert-dismissible"
+         role="alert">
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </button>
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- 页面主体：子模板通过 content 块把自己的内容填进来 -->
+<div class="container-fluid hrms-content">
+    {% block content %}{% endblock %}
+</div>
+
+<!-- 先加载 jQuery，再加载 Bootstrap（Bootstrap 的下拉菜单依赖 jQuery） -->
+<script src="{% static 'js/jquery-3.6.0.min.js' %}"></script>
+<script src="{% static 'plugins/bootstrap-3.4.1/js/bootstrap.min.js' %}"></script>
+
+<!-- 全局 AI 浮窗：除智能助手工作台外，每个页面右下角都挂着（对照参考仓库补充） -->
+{% if current_user and request.path != '/ai/' and request.path != '/ai/assistant/' %}
+{% include "app01/_ai_widget.html" %}
+{% endif %}
+
+<!-- 子模板可覆盖 js 块，放置页面级脚本 -->
+{% block js %}{% endblock %}
+</body>
+</html>

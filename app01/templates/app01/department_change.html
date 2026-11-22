@@ -1,0 +1,58 @@
+{% extends 'app01/layout.html' %}
+
+{% block content %}
+<!--
+    部门新建/编辑共用页（本页为手工渲染表单，未使用 ModelForm）：
+    1. 用 depart 变量是否存在判断编辑还是新建；
+    2. 负责人下拉来自 user_list，当前负责人会保持选中；
+    3. 部门名称在后端做非空与重名校验，错误通过 error 变量回显；
+    4. 校验失败时用 form_title / form_leader_id 保留用户刚输入的内容。
+-->
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <span class="h4">
+            {% if depart %}编辑部门{% else %}新建部门{% endif %}
+        </span>
+    </div>
+    <div class="panel-body">
+        {% if error %}
+        <div class="alert alert-danger" role="alert">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" class="form-horizontal" style="max-width:600px;">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="col-sm-2 control-label">部门名称</label>
+                <div class="col-sm-10">
+                    <input type="text" class="form-control" name="title"
+                           placeholder="请输入部门名称"
+                           value="{% if form_title %}{{ form_title }}{% elif depart %}{{ depart.title }}{% endif %}"
+                           maxlength="32" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-2 control-label">负责人</label>
+                <div class="col-sm-10">
+                    <select class="form-control" name="leader_id">
+                        <option value="">------</option>
+                        {% for user in user_list %}
+                        <option value="{{ user.id }}"
+                            {% if form_leader_id == user.id|stringformat:"s" %}selected
+                            {% elif not form_leader_id and depart and depart.leader_id == user.id %}selected
+                            {% endif %}>
+                            {{ user.username }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="col-sm-offset-2 col-sm-10">
+                    <button type="submit" class="btn btn-primary">提交</button>
+                    <a href="/depart/list/" class="btn btn-default">返回</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

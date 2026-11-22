@@ -1,0 +1,125 @@
+{% extends 'app01/layout.html' %}
+
+{% block content %}
+<!--
+    员工列表页（前端核心页面之一）
+    页面结构：搜索栏 -> 新建按钮 -> 数据表格 -> 分页
+    数据来源：后端 employee_list 视图传入 page_obj、depart_list、keyword、depart_id
+-->
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <!--
+            搜索表单：GET 提交，条件会拼到地址栏（?keyword=xx&depart_id=1）
+            - keyword：按姓名模糊搜索
+            - depart_id：按部门筛选
+            - 重置按钮直接跳到 /employee/list/ 清空所有条件
+        -->
+        <form class="form-inline" method="get">
+            <div class="form-group">
+                <input type="text" class="form-control" name="keyword"
+                       value="{{ keyword }}" placeholder="员工姓名">
+            </div>
+            <div class="form-group">
+                <select class="form-control" name="depart_id">
+                    <option value="">全部部门</option>
+                    {% for depart in depart_list %}
+                    <!-- 回显当前筛选的部门：depart_id == depart.id 时选中 -->
+                    <option value="{{ depart.id }}"
+                        {% if depart_id == depart.id %}selected{% endif %}>
+                        {{ depart.title }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">搜索</button>
+            <a href="/employee/list/" class="btn btn-default">重置</a>
+        </form>
+    </div>
+    <div class="panel-body">
+        {% if can_manage %}
+        <a href="/employee/add/" class="btn btn-success" style="margin-bottom:10px;">新建员工</a>
+        {% else %}
+        <p class="text-muted" style="margin-bottom:10px;">
+            当前为普通员工视角，只能查看本人档案；新增、修改、删除由部门管理员或超级管理员操作。
+        </p>
+        {% endif %}
+        <table class="table table-bordered table-hover">
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>头像</th>
+                <th>姓名</th>
+                <th>年龄</th>
+                <th>性别</th>
+                <th>余额</th>
+                <th>入职时间</th>
+                <th>手机号</th>
+                <th>部门</th>
+                <th>操作</th>
+            </tr>
+            </thead>
+            <tbody>
+            <!-- page_obj 可直接迭代，只包含当前页的数据 -->
+            {% for emp in page_obj %}
+            <tr>
+                <td>{{ emp.id }}</td>
+                <td>
+                    <!-- 有头像才显示图片；没有头像用 "-" 占位，避免出现破图 -->
+                    {% if emp.avatar %}
+                    <img src="{{ emp.avatar.url }}" style="width:40px;height:40px;border-radius:50%;">
+                    {% else %}
+                    <span class="text-muted">-</span>
+                    {% endif %}
+                </td>
+                <td>{{ emp.name }}</td>
+                <td>{{ emp.age }}</td>
+                <!-- get_gender_display：把数据库里的 1/2 转成"男/女" -->
+                <td>{{ emp.get_gender_display }}</td>
+                <td>{{ emp.balance }}</td>
+                <td>{{ emp.entry_date }}</td>
+                <td>{{ emp.mobile }}</td>
+                <td>{{ emp.depart.title }}</td>
+                <td>
+                    {% if can_manage %}
+                    <a href="/employee/edit/{{ emp.id }}/"
+                       class="btn btn-primary btn-sm btn-edit">编辑</a>
+                    <!--
+                        删除必须用 POST + CSRF：
+                        onsubmit 里先弹确认框，用户确认后才真正提交，防止误删。
+                    -->
+                    <form method="post" action="/employee/delete/{{ emp.id }}/" style="display:inline;"
+                          onsubmit="return confirm('确定删除该员工吗？');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger btn-sm">删除</button>
+                    </form>
+                    {% else %}
+                    <span class="text-muted">只读</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <!-- 查询结果为空时给一行提示，而不是空白页面 -->
+            <tr><td colspan="10" class="text-center text-muted">暂无数据</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <!--
+            分页区域（核心细节）：
+            翻页链接必须把 keyword 和 depart_id 一起带上，
+            否则点"下一页"后搜索条件丢失，看到的就是全量数据。
+        -->
+        <nav class="text-center">
+            <ul class="pagination">
+                {% if page_obj.has_previous %}
+                <li><a href="?page={{ page_obj.previous_page_number }}&keyword={{ keyword }}&depart_id={{ depart_id }}">上一页</a></li>
+                {% endif %}
+                <li class="active"><a>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</a></li>
+                {% if page_obj.has_next %}
+                <li><a href="?page={{ page_obj.next_page_number }}&keyword={{ keyword }}&depart_id={{ depart_id }}">下一页</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endblock %}

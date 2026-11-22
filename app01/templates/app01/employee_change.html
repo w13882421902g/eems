@@ -1,0 +1,93 @@
+{% extends 'app01/layout.html' %}
+
+{% block content %}
+<!--
+    员工新建/编辑共用同一模板：
+    - 通过 form.instance.pk 判断是"新建"还是"编辑"（有主键说明是编辑已有记录）；
+    - 表单字段不写死，用 for field in form 自动渲染，新增字段时页面自动跟随；
+    - 头像额外加一个预览框（讲义第 20.4 节）：选文件时用 FileReader 本地读成 DataURL 显示，
+      只是浏览器端的即时预览，并没有真正上传，真正上传发生在点击"提交"后。
+-->
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <span class="h4">
+            {% if form.instance.pk %}编辑员工{% else %}新建员工{% endif %}
+        </span>
+    </div>
+    <div class="panel-body">
+        <!--
+            enctype="multipart/form-data" 是文件上传的必要条件：
+            没有它，头像文件不会出现在 request.FILES 里。
+        -->
+        <form method="post" enctype="multipart/form-data"
+              class="form-horizontal" style="max-width:700px;" novalidate>
+            {% csrf_token %}
+
+            <!-- 头像预览：选新文件时实时换图；没选时显示已有头像或占位提示 -->
+            <div class="form-group">
+                <label class="col-sm-2 control-label">头像预览</label>
+                <div class="col-sm-10">
+                    <div style="width:100px;height:100px;padding:2px;border:1px dashed #cccccc;
+                                display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                        <img id="avatarPreview"
+                             src="{% if form.instance.avatar %}{{ form.instance.avatar.url }}{% endif %}"
+                             alt="头像预览"
+                             style="max-width:100%;max-height:100%;{% if not form.instance.avatar %}display:none;{% endif %}">
+                        <span id="avatarPlaceholder" class="text-muted small"
+                              style="{% if form.instance.avatar %}display:none;{% endif %}">暂无头像</span>
+                    </div>
+                    <span class="help-block small">支持 jpg / png / webp / gif，大小不超过 2MB。</span>
+                </div>
+            </div>
+
+            {% for field in form %}
+            <div class="form-group{% if field.errors %} has-error{% endif %}">
+                <label class="col-sm-2 control-label">{{ field.label }}</label>
+                <div class="col-sm-10">
+                    <!-- field 变量由 ModelForm 自动生成对应控件（日期用 date 控件等） -->
+                    {{ field }}
+                    <!-- errors.0 只取该字段第一条错误，界面更简洁 -->
+                    <span class="text-danger">{{ field.errors.0 }}</span>
+                </div>
+            </div>
+            {% endfor %}
+            <div class="form-group">
+                <div class="col-sm-offset-2 col-sm-10">
+                    <button type="submit" class="btn btn-primary">提交</button>
+                    <a href="/employee/list/" class="btn btn-default">返回</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+    /*
+     * 头像本地预览：
+     * - FileReader.readAsDataURL 把文件读成 base64 字符串，直接塞给 img.src；
+     * - 这里只是"看一眼"，不会上传，也不会减少后端校验的必要性；
+     * - 前端先拦一次超过 2MB 的文件，避免用户白等一次提交失败。
+     */
+    $(function () {
+        $("#id_avatar").change(function () {
+            var file = this.files && this.files[0];
+            if (!file) { return; }
+
+            if (file.size > 2 * 1024 * 1024) {
+                alert("头像不能超过 2MB");
+                this.value = "";     // 清空选择，避免提交时才报错
+                return;
+            }
+
+            var reader = new FileReader();
+            reader.onload = function (event) {
+                $("#avatarPreview").attr("src", event.target.result).show();
+                $("#avatarPlaceholder").hide();
+            };
+            reader.readAsDataURL(file);
+        });
+    });
+</script>
+{% endblock %}

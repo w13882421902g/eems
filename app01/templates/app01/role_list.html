@@ -1,0 +1,51 @@
+{% extends 'app01/layout.html' %}
+
+{% block content %}
+<!--
+    角色列表页（RBAC 中"角色-权限"关系的展示入口，仅超级管理员可见）。
+    每个角色后面列出它拥有的权限，权限在角色编辑页通过复选框勾选维护。
+-->
+<div class="panel panel-default">
+    <div class="panel-heading"><span class="h4">角色列表</span></div>
+    <div class="panel-body">
+        <a href="/role/add/" class="btn btn-success" style="margin-bottom:10px;">新建角色</a>
+        <table class="table table-bordered table-hover">
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>角色名称</th>
+                <th>拥有权限</th>
+                <th>操作</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for role in role_list %}
+            <tr>
+                <td>{{ role.id }}</td>
+                <td>{{ role.title }}</td>
+                <td>
+                    <!-- prefetch_related 已在视图预取权限，这里循环不会逐条查库 -->
+                    {% for perm in role.permissions.all %}
+                    <span class="label label-default">{{ perm.title }}</span>
+                    {% empty %}
+                    <span class="text-muted">暂无权限</span>
+                    {% endfor %}
+                </td>
+                <td>
+                    <a href="/role/edit/{{ role.id }}/"
+                       class="btn btn-primary btn-sm btn-edit">编辑</a>
+                    <form method="post" action="/role/delete/{{ role.id }}/" style="display:inline;"
+                          onsubmit="return confirm('确定删除吗？');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger btn-sm">删除</button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center text-muted">暂无数据</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

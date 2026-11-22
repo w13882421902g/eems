@@ -1,0 +1,325 @@
+{% extends 'app01/layout.html' %}
+
+{% block css %}
+<style>
+    /* ===== 标签页主区 ===== */
+    .ai-tabs { margin-bottom: 16px; }
+    .tab-pane-box {
+        background: #fff; border: 1px solid #e8e8e8; border-top: none;
+        border-radius: 0 4px 4px 4px; padding: 20px; min-height: 360px;
+    }
+    .ai-result {
+        white-space: pre-wrap;
+        background: #f7f8fa; border: 1px solid #eee; border-radius: 4px;
+        padding: 14px; min-height: 120px; margin-top: 12px; line-height: 1.7;
+    }
+    .example-tags { margin-top: 8px; }
+    .example-tags .label { cursor: pointer; margin-right: 6px; font-weight: normal; }
+
+    /* ===== 右侧悬浮聊天窗 ===== */
+    .chat-float {
+        position: fixed; right: 24px; bottom: 24px; width: 360px;
+        max-width: calc(100vw - 32px); z-index: 1050;
+        box-shadow: 0 6px 24px rgba(0,0,0,.18); border-radius: 10px; overflow: hidden;
+        background: #fff;
+    }
+    .chat-float-header {
+        background: #337ab7; color: #fff; padding: 10px 14px;
+        display: flex; align-items: center; justify-content: space-between;
+    }
+    .chat-float-header .title { font-weight: bold; }
+    .chat-float-header .actions a { color: #fff; opacity: .85; margin-left: 10px; cursor: pointer; }
+    .chat-float-header .actions a:hover { opacity: 1; }
+    .chat-box {
+        height: 280px; overflow-y: auto; padding: 14px; background: #fafafa;
+    }
+    .chat-msg { margin-bottom: 12px; }
+    .chat-msg .who { font-weight: bold; margin-bottom: 2px; font-size: 12px; }
+    .chat-msg.user .who { color: #337ab7; }
+    .chat-msg.assistant .who { color: #5cb85c; }
+    .chat-bubble { white-space: pre-wrap; }
+    .chat-msg.user { text-align: right; }
+    .chat-msg.user .chat-bubble {
+        display: inline-block; background: #e8f1fb; border-radius: 8px; padding: 8px 12px;
+    }
+    .chat-msg.assistant .chat-bubble {
+        display: inline-block; background: #f0f0f0; border-radius: 8px; padding: 8px 12px;
+    }
+    .loading { color: #999; font-style: italic; }
+    .chat-input-area { padding: 10px 12px; border-top: 1px solid #eee; }
+    .chat-input-area textarea { resize: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+
+{% if not llm_configured %}
+<div class="alert alert-warning">
+    <strong>当前未配置大模型 Key：</strong>所有 AI 功能会自动使用规则兜底（页面不会报错）。
+    配置方法：打开项目根目录 <code>.env</code>，填写 <code>AI_API_KEY=你的Key</code> 后重启服务；
+    也可执行 <code>python manage.py check_ai --test</code> 验证连通性。
+</div>
+{% else %}
+<p class="text-muted">当前模型：<code>{{ model_name }}</code>；制度库共 {{ knowledge_count }} 条。</p>
+{% endif %}
+
+<!-- 顶部标签页 -->
+<ul class="nav nav-tabs ai-tabs" id="aiTabs">
+    <li class="active"><a href="#panel-chat" data-toggle="tab">智能对话</a></li>
+    <li><a href="#panel-jd" data-toggle="tab">招聘 JD 生成</a></li>
+    <li><a href="#panel-qa" data-toggle="tab">制度知识库问答</a></li>
+    <li><a href="#panel-comment" data-toggle="tab">数据智能点评</a></li>
+</ul>
+
+<div class="tab-content">
+    <!-- 智能对话（主区，与右侧悬浮窗共用同一套对话逻辑） -->
+    <div class="tab-pane active" id="panel-chat">
+        <div class="tab-pane-box">
+            <div class="chat-box" id="chatBoxMain">
+                <div class="chat-msg assistant">
+                    <div class="who">助手</div>
+                    <div class="chat-bubble">你好，我是企业内部智能助手，可以继续追问上一个问题。</div>
+                </div>
+            </div>
+            <div class="input-group" style="margin-top:10px;">
+                <input type="text" class="form-control" id="chatInputMain" placeholder="输入问题，回车发送">
+                <span class="input-group-btn">
+                    <button type="button" id="btnChatMain" class="btn btn-primary">发送</button>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 招聘 JD 生成 -->
+    <div class="tab-pane" id="panel-jd">
+        <div class="tab-pane-box">
+            <div class="form-group">
+                <label>岗位名称</label>
+                <input type="text" class="form-control" id="jdTitle" placeholder="例如：Java 后端工程师 / 产品经理">
+                <div class="example-tags">
+                    <span class="label label-default example" data-title="Python 后端工程师">Python 后端工程师</span>
+                    <span class="label label-default example" data-title="人事专员">人事专员</span>
+                    <span class="label label-default example" data-title="前端开发工程师">前端开发工程师</span>
+                </div>
+            </div>
+            <button type="button" id="btnJd" class="btn btn-primary">生成 JD</button>
+            <div class="ai-result" id="jdResult">填写岗位名称后点击"生成 JD"，结果将展示在这里。</div>
+        </div>
+    </div>
+
+    <!-- 制度知识库问答 -->
+    <div class="tab-pane" id="panel-qa">
+        <div class="tab-pane-box">
+            <div class="form-group">
+                <label>你的问题</label>
+                <input type="text" class="form-control" id="qaQuestion" placeholder="例如：迟到几次会扣奖金？报销需要什么材料？">
+            </div>
+            <button type="button" id="btnQa" class="btn btn-primary">提问</button>
+            <div class="ai-result" id="qaResult">输入与公司制度相关的问题，系统将检索知识库后回答。</div>
+        </div>
+    </div>
+
+    <!-- 数据智能点评 -->
+    <div class="tab-pane" id="panel-comment">
+        <div class="tab-pane-box">
+            <div class="row">
+                <div class="form-group col-md-6">
+                    <label>员工</label>
+                    <select class="form-control" id="commentEmployee">
+                        <option value="">请选择员工</option>
+                        {% for emp in employee_list %}
+                        <option value="{{ emp.id }}">{{ emp.name }}（{{ emp.depart.title }}）</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-md-6">
+                    <label>月份</label>
+                    <select class="form-control" id="commentMonth">
+                        <option value="">请选择月份</option>
+                        {% for m in month_list %}
+                        <option value="{{ m }}">{{ m }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <button type="button" id="btnComment" class="btn btn-primary">生成点评</button>
+            <div class="ai-result" id="commentResult">选择员工和月份后，生成基于考勤与薪资数据的点评建议。</div>
+        </div>
+    </div>
+</div>
+
+<!-- 右侧悬浮聊天窗（与主区智能对话同步） -->
+<div class="chat-float" id="chatFloat">
+    <div class="chat-float-header">
+        <span class="title">AI 智能助手</span>
+        <span class="actions">
+            <a id="btnClearChat" title="清空对话">清空</a>
+            <a id="btnCollapseChat" title="收起/展开">×</a>
+        </span>
+    </div>
+    <div id="chatFloatBody">
+        <div class="chat-box" id="chatBoxFloat">
+            <div class="chat-msg assistant">
+                <div class="who">助手</div>
+                <div class="chat-bubble">你好，可以继续追问上一个问题。</div>
+            </div>
+        </div>
+        <div class="chat-input-area">
+            <textarea class="form-control" id="chatInputFloat" rows="2"
+                      placeholder="输入问题，Enter 发送，Shift+Enter 换行"></textarea>
+            <button type="button" id="btnChatFloat" class="btn btn-primary btn-block" style="margin-top:8px;">发送</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+    /* 统一从页面 csrf 标签取令牌，AJAX POST 请求头带上 X-CSRFToken */
+    var CSRF_TOKEN = $("input[name=csrfmiddlewaretoken]").val();
+
+    function postJson(url, data, onSuccess) {
+        $.ajax({
+            url: url,
+            type: "post",
+            data: data,
+            headers: {"X-CSRFToken": CSRF_TOKEN},
+            dataType: "json",
+            success: function (res) {
+                if (res.status) {
+                    onSuccess(res.data);
+                } else {
+                    alert(res.error || "操作失败");
+                }
+            },
+            error: function () {
+                alert("网络异常，请稍后再试");
+            }
+        });
+    }
+
+    /* T2 招聘 JD：示例标签一键填入 */
+    $(".example").click(function () {
+        $("#jdTitle").val($(this).data("title"));
+    });
+
+    $("#btnJd").click(function () {
+        var title = $("#jdTitle").val().trim();
+        if (!title) { alert("请输入岗位名称"); return; }
+        var $box = $("#jdResult");
+        $box.text("正在生成……");
+        postJson("/ai/jd/", {title: title}, function (text) { $box.text(text); });
+    });
+
+    /* T3 制度问答 */
+    $("#btnQa").click(function () {
+        var question = $("#qaQuestion").val().trim();
+        if (!question) { alert("请输入问题"); return; }
+        var $box = $("#qaResult");
+        $box.text("正在检索并回答……");
+        postJson("/ai/knowledge/qa/", {question: question}, function (text) { $box.text(text); });
+    });
+
+    /* T4 数据点评 */
+    $("#btnComment").click(function () {
+        var employeeId = $("#commentEmployee").val();
+        var month = $("#commentMonth").val();
+        if (!employeeId || !month) { alert("请选择员工和月份"); return; }
+        var $box = $("#commentResult");
+        $box.text("正在分析数据……");
+        postJson("/ai/comment/", {employee_id: employeeId, month: month}, function (text) { $box.text(text); });
+    });
+
+    /* ===== T5 多轮对话：主区与悬浮窗共用，消息双向同步 ===== */
+    function appendChat(role, who, text) {
+        var $msg = $('<div class="chat-msg ' + role + '">');
+        $msg.append('<div class="who">' + who + '</div>');
+        $msg.append('<div class="chat-bubble"></div>');
+        $msg.find(".chat-bubble").text(text);
+        // 同时写入主区和悬浮窗
+        $("#chatBoxMain").append($msg.clone());
+        $("#chatBoxFloat").append($msg.clone());
+        scrollChat();
+    }
+
+    function scrollChat() {
+        $("#chatBoxMain, #chatBoxFloat").each(function () {
+            this.scrollTop = this.scrollHeight;
+        });
+    }
+
+    function sendChat(question) {
+        question = (question || "").trim();
+        if (!question) { return; }
+        appendChat("user", "我", question);
+        var $loading = $('<div class="chat-msg assistant"><div class="who">助手</div><div class="chat-bubble loading">正在思考……</div></div>');
+        $("#chatBoxMain").append($loading.clone());
+        $("#chatBoxFloat").append($loading.clone());
+        scrollChat();
+
+        $.ajax({
+            url: "/ai/chat/",
+            type: "post",
+            data: {question: question},
+            headers: {"X-CSRFToken": CSRF_TOKEN},
+            dataType: "json",
+            success: function (res) {
+                $("#chatBoxMain, #chatBoxFloat").find(".loading").closest(".chat-msg").remove();
+                if (res.status) {
+                    appendChat("assistant", "助手", res.data);
+                } else {
+                    alert(res.error || "对话失败");
+                }
+            },
+            error: function () {
+                $("#chatBoxMain, #chatBoxFloat").find(".loading").closest(".chat-msg").remove();
+                alert("网络异常，请稍后再试");
+            }
+        });
+    }
+
+    /* 主区输入框：回车发送 */
+    $("#btnChatMain").click(function () {
+        sendChat($("#chatInputMain").val());
+        $("#chatInputMain").val("");
+    });
+    $("#chatInputMain").keydown(function (e) {
+        if (e.keyCode === 13) { sendChat($(this).val()); $(this).val(""); }
+    });
+
+    /* 悬浮窗输入框：Enter 发送，Shift+Enter 换行 */
+    $("#btnChatFloat").click(function () {
+        sendChat($("#chatInputFloat").val());
+        $("#chatInputFloat").val("");
+    });
+    $("#chatInputFloat").keydown(function (e) {
+        if (e.keyCode === 13 && !e.shiftKey) {
+            e.preventDefault();
+            sendChat($(this).val());
+            $(this).val("");
+        }
+    });
+
+    /* 清空对话：同时清空两处气泡和 session 历史 */
+    $("#btnClearChat").click(function () {
+        $.ajax({
+            url: "/ai/chat/",
+            type: "post",
+            data: {clear: "1"},
+            headers: {"X-CSRFToken": CSRF_TOKEN},
+            dataType: "json"
+        });
+        $("#chatBoxMain, #chatBoxFloat").find(".chat-msg").remove();
+        appendChat("assistant", "助手", "对话已清空，可以开始新的提问。");
+    });
+
+    /* 收起 / 展开悬浮窗 */
+    var collapsed = false;
+    $("#btnCollapseChat").click(function () {
+        collapsed = !collapsed;
+        $("#chatFloatBody").toggle(!collapsed);
+        $(this).text(collapsed ? "▢" : "×");
+    });
+</script>
+{% endblock %}

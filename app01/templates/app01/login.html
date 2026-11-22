@@ -1,0 +1,83 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>系统登录</title>
+    <link rel="stylesheet" href="{% static 'plugins/bootstrap-3.4.1/css/bootstrap.min.css' %}">
+    <style>
+        /* 登录页单独样式：浅灰背景 + 居中卡片 */
+        body {
+            background-color: #f5f5f5;
+            padding-top: 120px;
+        }
+        .login-box {
+            max-width: 420px;
+            margin: 0 auto;
+        }
+        /* 验证码图片高度与输入框保持一致，并提示可点击 */
+        #imgCode {
+            height: 34px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div class="container login-box">
+    <div class="panel panel-default">
+        <div class="panel-heading text-center">
+            <h3 class="panel-title">企业员工管理系统 - 登录</h3>
+        </div>
+        <div class="panel-body">
+            <!--
+                登录表单说明：
+                - method="post"：账号密码不能走 GET，避免出现在浏览器地址栏和访问日志里；
+                - csrf_token 标签：Django 的 CSRF 令牌，服务端会校验，防止跨站伪造提交；
+                - 后端登录失败时通过 {"error": "..."} 传入错误文案，这里用 alert 展示。
+            -->
+            <form method="post">
+                {% csrf_token %}
+                {% if error %}
+                <div class="alert alert-danger">{{ error }}</div>
+                {% endif %}
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" class="form-control" name="username"
+                           placeholder="请输入用户名" required>
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" class="form-control" name="password"
+                           placeholder="请输入密码" required>
+                </div>
+                <div class="form-group">
+                    <label>图片验证码</label>
+                    <div class="row">
+                        <div class="col-xs-7">
+                            <input type="text" class="form-control" name="img_code"
+                                   placeholder="请输入验证码" required>
+                        </div>
+                        <div class="col-xs-5">
+                            <!--
+                                验证码图片由后端 /image/code/ 生成：
+                                每次请求都会生成新字符并写入 session，同时返回 PNG。
+                            -->
+                            <img id="imgCode" src="/image/code/" title="点击刷新">
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">登录</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'js/jquery-3.6.0.min.js' %}"></script>
+<script>
+    // 点击验证码图片刷新：追加随机参数，绕过浏览器对同一 URL 的缓存
+    $("#imgCode").click(function () {
+        $(this).attr("src", "/image/code/?t=" + Math.random());
+    });
+</script>
+</body>
+</html>
